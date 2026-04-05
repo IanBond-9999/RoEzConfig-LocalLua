@@ -12,16 +12,15 @@ import (
 type SheetConfig struct {
 	Name     string `json:"name"`     // 配置表名称
 	Token    string `json:"token"`    // 飞书 spreadsheetToken
-	Path     string `json:"path"`     // Studio 工程目标路径
-	FileName string `json:"fileName"` // 生成的 ModuleScript 名称
+	Path     string `json:"path"`     // 本地文件夹路径（绝对路径）
+	FileName string `json:"fileName"` // 生成的 .lua 文件名（不含扩展名）
 }
 
 // 全局配置结构 -- Ian
 type Config struct {
-	AppID      string        `json:"appId"`      // 飞书 App ID
-	AppSecret  string        `json:"appSecret"`  // 飞书 App Secret
-	Port       int           `json:"port"`       // 插件轮询端口
-	Sheets     []SheetConfig `json:"sheets"`     // 配置表列表
+	AppID     string        `json:"appId"`     // 飞书 App ID
+	AppSecret string        `json:"appSecret"` // 飞书 App Secret
+	Sheets    []SheetConfig `json:"sheets"`    // 配置表列表
 }
 
 // 配置管理器 -- Ian
@@ -47,7 +46,6 @@ func initConfig() error {
 	configManager = &ConfigManager{
 		filePath: filePath,
 		config: Config{
-			Port:   11451,        // 默认端口 -- Ian
 			Sheets: []SheetConfig{},
 		},
 	}
@@ -89,14 +87,6 @@ func (cm *ConfigManager) SaveCredentials(appId, appSecret string) error {
 	cm.mu.Lock()
 	cm.config.AppID = appId
 	cm.config.AppSecret = appSecret
-	cm.mu.Unlock()
-	return cm.save()
-}
-
-// 更新端口 -- Ian
-func (cm *ConfigManager) SavePort(port int) error {
-	cm.mu.Lock()
-	cm.config.Port = port
 	cm.mu.Unlock()
 	return cm.save()
 }

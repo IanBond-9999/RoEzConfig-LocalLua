@@ -5,3 +5,4 @@ resource.syso
 *.ico
 versioninfo.json
 *.exe
+.claude/

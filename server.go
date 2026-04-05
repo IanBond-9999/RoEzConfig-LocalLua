@@ -6,47 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
 )
-
-// 写入结果记录 -- Ian
-type WriteResult struct {
-	Done    bool     `json:"done"`
-	Success int      `json:"success"`
-	Fail    int      `json:"fail"`
-	Errors  []string `json:"errors"`
-}
-
-var (
-	lastResult *WriteResult
-	resultMu   sync.Mutex
-)
-
-// 待推送给 Studio 插件的任务队列 -- Ian
-type PendingTask struct {
-	Path     string `json:"path"`
-	FileName string `json:"fileName"`
-	Code     string `json:"code"`
-}
-
-var (
-	pendingTasks []PendingTask
-	taskMu       sync.Mutex
-)
-
-// 添加待推送任务 -- Ian
-func addPendingTasks(tasks []PendingTask) {
-	taskMu.Lock()
-	defer taskMu.Unlock()
-	pendingTasks = append(pendingTasks, tasks...)
-}
-
-// 清空待推送任务 -- Ian
-func clearPendingTasks() {
-	taskMu.Lock()
-	defer taskMu.Unlock()
-	pendingTasks = nil
-}
 
 // 统一的 JSON 响应helper -- Ian
 func writeJSON(w http.ResponseWriter, data any) {
@@ -63,12 +23,12 @@ func writeError(w http.ResponseWriter, msg string) {
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
-// 执行单张表导入，返回任务列表 -- Ian
-func importSheet(sheet SheetConfig) ([]PendingTask, error) {
+// 执行单张表导入，将 Lua 文件写到本地指定路径 -- Ian
+func importSheet(sheet SheetConfig) error {
 	// 第一步：获取 sheet 列表 -- Ian
 	sheets, err := feiShuClient.GetSheetInfo(sheet.Token)
 	if err != nil {
-		return nil, fmt.Errorf("获取 sheet 列表失败: %w", err)
+		return fmt.Errorf("获取 sheet 列表失败: %w", err)
 	}
 
 	// 第二步：收集 sheetID 列表 -- Ian
@@ -82,7 +42,7 @@ func importSheet(sheet SheetConfig) ([]PendingTask, error) {
 	// 第三步：批量获取数据 -- Ian
 	valueRanges, err := feiShuClient.GetSheetRangeData(sheet.Token, sheetIDs)
 	if err != nil {
-		return nil, fmt.Errorf("获取数据失败: %w", err)
+		return fmt.Errorf("获取数据失败: %w", err)
 	}
 
 	// 第四步：转换数据 -- Ian
@@ -116,79 +76,16 @@ func importSheet(sheet SheetConfig) ([]PendingTask, error) {
 
 	code := convertAll(sheetInfos)
 
-	return []PendingTask{{
-		Path:     sheet.Path,
-		FileName: sheet.FileName,
-		Code:     code,
-	}}, nil
-}
-
-// 启动给 Studio 插件用的轮询服务 -- Ian
-func startPluginServer(port int) {
-	mux := http.NewServeMux()
-
-	// 插件轮询接口 -- Ian
-	mux.HandleFunc("/poll", func(w http.ResponseWriter, r *http.Request) {
-		taskMu.Lock()
-		tasks := pendingTasks
-		taskMu.Unlock()
-
-		if len(tasks) == 0 {
-			writeJSON(w, map[string]any{"hasUpdate": false})
-			return
-		}
-
-		writeJSON(w, map[string]any{
-			"hasUpdate": true,
-			"tasks":     tasks,
-		})
-	})
-
-	// 插件确认写入完成，记录结果 -- Ian
-	mux.HandleFunc("/ack", func(w http.ResponseWriter, r *http.Request) {
-		var body struct {
-			Success int      `json:"success"`
-			Fail    int      `json:"fail"`
-			Errors  []string `json:"errors"`
-		}
-		json.NewDecoder(r.Body).Decode(&body)
-
-		resultMu.Lock()
-		lastResult = &WriteResult{
-			Done:    true,
-			Success: body.Success,
-			Fail:    body.Fail,
-			Errors:  body.Errors,
-		}
-		resultMu.Unlock()
-
-		clearPendingTasks()
-		writeJSON(w, map[string]any{"ok": true})
-	})
-
-	// 网页查询写入结果 -- Ian
-	mux.HandleFunc("/result", func(w http.ResponseWriter, r *http.Request) {
-		resultMu.Lock()
-		result := lastResult
-		if result != nil {
-			lastResult = nil // 读取后清空 -- Ian
-		}
-		resultMu.Unlock()
-
-		if result == nil {
-			writeJSON(w, map[string]any{"done": false})
-			return
-		}
-		writeJSON(w, result)
-	})
-
-	addr := fmt.Sprintf(":%d", port)
-	fmt.Printf("插件轮询服务启动，监听 %s\n", addr)
-	http.ListenAndServe(addr, mux)
+	// 第五步：写入本地 .lua 文件 -- Ian
+	if err := os.MkdirAll(sheet.Path, 0755); err != nil {
+		return fmt.Errorf("创建目录失败: %w", err)
+	}
+	filePath := filepath.Join(sheet.Path, sheet.FileName+".lua")
+	return os.WriteFile(filePath, []byte(code), 0644)
 }
 
 // 启动给浏览器 UI 用的管理服务 -- Ian
-func startUIServer(port int) {
+func startUIServer() {
 	mux := http.NewServeMux()
 
 	// 获取所有配置 -- Ian
@@ -318,14 +215,10 @@ func startUIServer(port int) {
 			return
 		}
 
-		tasks, err := importSheet(*target)
-		if err != nil {
+		if err := importSheet(*target); err != nil {
 			writeError(w, err.Error())
 			return
 		}
-
-		clearPendingTasks()
-		addPendingTasks(tasks)
 		writeJSON(w, map[string]any{"ok": true})
 	})
 
@@ -342,47 +235,17 @@ func startUIServer(port int) {
 			return
 		}
 
-		var allTasks []PendingTask
 		var errors []string
-
 		for _, sheet := range sheets {
-			tasks, err := importSheet(sheet)
-			if err != nil {
+			if err := importSheet(sheet); err != nil {
 				errors = append(errors, fmt.Sprintf("「%s」失败: %s", sheet.Name, err.Error()))
-			} else {
-				allTasks = append(allTasks, tasks...)
 			}
-		}
-
-		if len(allTasks) > 0 {
-			clearPendingTasks()
-			addPendingTasks(allTasks)
 		}
 
 		writeJSON(w, map[string]any{
 			"ok":     true,
 			"errors": errors,
 		})
-	})
-
-	// 保存端口设置 -- Ian
-	mux.HandleFunc("/api/port", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			writeError(w, "Method not allowed")
-			return
-		}
-		var body struct {
-			Port int `json:"port"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			writeError(w, "请求格式错误")
-			return
-		}
-		if err := configManager.SavePort(body.Port); err != nil {
-			writeError(w, err.Error())
-			return
-		}
-		writeJSON(w, map[string]any{"ok": true})
 	})
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -430,7 +293,6 @@ func startUIServer(port int) {
 		writeJSON(w, map[string]any{"ok": true})
 	})
 
-	addr := fmt.Sprintf(":%d", port+1)
-	fmt.Printf("UI 服务启动，监听 %s\n", addr)
-	http.ListenAndServe(addr, mux)
+	fmt.Println("UI 服务启动，监听 :11451")
+	http.ListenAndServe(":11451", mux)
 }

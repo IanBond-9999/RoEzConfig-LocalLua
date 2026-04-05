@@ -1,4 +1,4 @@
-module roezconfig
+module roezconfig-locallua
 
 go 1.26.1
 
