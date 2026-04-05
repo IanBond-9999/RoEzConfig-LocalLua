@@ -4,3 +4,4 @@ ExcelConfig.json
 resource.syso
 *.ico
 versioninfo.json
+*.exe
