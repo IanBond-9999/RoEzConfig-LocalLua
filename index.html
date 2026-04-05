@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RoEzConfig - LarkExcel2Studio</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+  .container { max-width: 860px; margin: 0 auto; padding: 32px 24px; }
+  .header { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
+  .header h1 { font-size: 22px; font-weight: 700; color: #fff; }
+  .header .version { font-size: 12px; color: #4a5568; background: #1a1d27; padding: 3px 8px; border-radius: 4px; }
+  .card { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+  .card-title { font-size: 13px; font-weight: 600; color: #7c85b0; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px; }
+  .form-row { display: flex; gap: 12px; margin-bottom: 12px; align-items: flex-end; }
+  .form-group { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .form-group label { font-size: 13px; color: #a0aec0; }
+  input { background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 10px 14px; color: #e2e8f0; font-size: 14px; outline: none; transition: border-color 0.2s; }
+  .form-group input { width: 100%; }
+  .form-group input:focus { border-color: #5b6af0; }
+  .port-group { display: flex; flex-direction: column; gap: 6px; }
+  .port-group label { font-size: 13px; color: #a0aec0; }
+  .port-row { display: flex; gap: 8px; align-items: center; }
+  .port-row input { background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 10px 14px; color: #e2e8f0; font-size: 14px; width: 120px; outline: none; transition: border-color 0.2s; }
+  .port-row input:focus { border-color: #5b6af0; }
+  input::placeholder { color: #4a5568; }
+  .btn { padding: 10px 20px; border-radius: 8px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+  .btn-primary { background: #5b6af0; color: #fff; }
+  .btn-primary:hover { background: #4a59e0; }
+  .btn-secondary { background: #2d3148; color: #a0aec0; }
+  .btn-secondary:hover { background: #363b5a; color: #e2e8f0; }
+  .btn-danger { background: transparent; color: #fc8181; border: 1px solid #fc8181; }
+  .btn-danger:hover { background: #fc8181; color: #fff; }
+  .btn-success { background: #38a169; color: #fff; }
+  .btn-success:hover { background: #2f855a; }
+  .btn-sm { padding: 6px 14px; font-size: 13px; }
+  .btn-row { display: flex; gap: 10px; }
+  .sheet-list { display: flex; flex-direction: column; gap: 10px; }
+  .sheet-item { background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; }
+  .sheet-item-info { flex: 1; }
+  .sheet-item-name { font-size: 14px; font-weight: 600; color: #e2e8f0; margin-bottom: 4px; }
+  .sheet-item-meta { font-size: 12px; color: #4a5568; }
+  .sheet-item-actions { display: flex; gap: 8px; align-items: center; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #2d3148; flex-shrink: 0; }
+  .status-dot.importing { background: #f6ad55; animation: pulse 1s infinite; }
+  .status-dot.success { background: #68d391; }
+  .status-dot.error { background: #fc8181; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .log-box { background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 14px; height: 180px; overflow-y: auto; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 13px; line-height: 1.6; }
+  .log-line { color: #a0aec0; }
+  .log-line.error { color: #fc8181; }
+  .log-line.success { color: #68d391; }
+  .empty-state { text-align: center; padding: 32px; color: #4a5568; font-size: 14px; }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; }
+  .modal-overlay.active { display: flex; }
+  .modal { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; padding: 28px; width: 480px; max-width: 90vw; }
+  .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+  .modal .form-group input { background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 10px 14px; color: #e2e8f0; font-size: 14px; width: 100%; outline: none; transition: border-color 0.2s; }
+  .section-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>🚀 RoEzConfig</h1>
+    <span class="version">LarkExcel2Studio</span>
+    <a href="#guide" onclick="toggleGuide()" style="margin-left:auto; font-size:13px; color:#7c85b0; cursor:pointer; text-decoration:none;">📖 使用说明</a>
+  </div>
+
+  <!-- 使用说明（默认折叠）-- Ian -->
+  <div id="guide" style="display:none;">
+    <div class="card">
+      <div class="card-title">使用说明</div>
+      <div style="font-size:14px; line-height:1.8; color:#a0aec0;">
+        <p style="margin-bottom:12px;"><strong style="color:#e2e8f0;">表格格式约定</strong></p>
+        <table style="width:100%; border-collapse:collapse; margin-bottom:16px;">
+          <tr style="border-bottom:1px solid #2d3148;">
+            <td style="padding:8px; color:#7c85b0;">第 1 行</td>
+            <td style="padding:8px;">字段名（英文）</td>
+          </tr>
+          <tr style="border-bottom:1px solid #2d3148;">
+            <td style="padding:8px; color:#7c85b0;">第 2 行</td>
+            <td style="padding:8px;">中文备注（导入时跳过）</td>
+          </tr>
+          <tr style="border-bottom:1px solid #2d3148;">
+            <td style="padding:8px; color:#7c85b0;">第 3 行</td>
+            <td style="padding:8px;">字段类型（number 或 string）</td>
+          </tr>
+          <tr>
+            <td style="padding:8px; color:#7c85b0;">第 4 行起</td>
+            <td style="padding:8px;">数据行，第 1 列为主键</td>
+          </tr>
+        </table>
+        <p style="margin-bottom:8px;">💡 将备注列命名为 <code style="background:#2d3148; padding:2px 6px; border-radius:4px;">Note</code> 会自动跳过，不导入。</p>
+        <p style="margin-bottom:16px;">💡 飞书 Token 在表格 URL 中获取，类似 <code style="background:#2d3148; padding:2px 6px; border-radius:4px;">JzeysH5p1ang2ktu5sGcTOGFnLe</code>的一段字符串。</p>
+        <p style="margin-bottom:8px;"><strong style="color:#e2e8f0;">团队协作</strong></p>
+        <p style="margin-bottom:16px;">配置好所有表格后点击「导出方案」，将生成在同目录的 ExcelConfig.json 分享给团队成员，成员点击「加载方案」即可一键同步所有配置。</p>
+        <p style="margin-bottom:8px;"><strong style="color:#e2e8f0;">端口说明</strong></p>
+        <p>默认 11451 为 Studio 插件轮询端口，11452 为网页管理界面端口。修改端口后需要重启程序生效。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 飞书设置 -->
+  <div class="card">
+    <div class="card-title">飞书设置</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>App ID</label>
+        <input id="appId" type="text" placeholder="cli_xxxxxxxxxx" />
+      </div>
+      <div class="form-group">
+        <label>App Secret</label>
+        <input id="appSecret" type="password" placeholder="••••••••••••••••" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Studio 插件端口</label>
+        <input id="port" type="number" placeholder="11451" />
+      </div>
+      <div class="form-group" style="justify-content:flex-end;">
+        <label>&nbsp;</label>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="savePort()">保存端口</button>
+          <button class="btn btn-secondary" onclick="testConnection()">测试连接</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 配置表列表 -->
+  <div class="card">
+    <div class="section-actions">
+      <span class="card-title" style="margin-bottom:0">配置表列表</span>
+      <div class="btn-row">
+        <button class="btn btn-secondary btn-sm" onclick="exportScheme()">保存方案</button>
+        <button class="btn btn-secondary btn-sm" onclick="loadScheme()">加载方案</button>
+        <button class="btn btn-success btn-sm" onclick="importAll()">全部导入</button>
+        <button class="btn btn-primary btn-sm" onclick="showAddModal()">+ 添加</button>
+      </div>
+    </div>
+    <div class="sheet-list" id="sheetList">
+      <div class="empty-state">暂无配置表，点击右上角添加</div>
+    </div>
+  </div>
+
+  <!-- 日志 -->
+  <div class="card">
+    <div class="section-actions">
+      <span class="card-title" style="margin-bottom:0">日志</span>
+      <button class="btn btn-secondary btn-sm" onclick="clearLog()">清空</button>
+    </div>
+    <div class="log-box" id="logBox"></div>
+  </div>
+</div>
+
+<!-- 添加/编辑弹窗 -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle">添加配置表</div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>名称</label>
+      <input id="formName" type="text" placeholder="例：怪物表" />
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>飞书 Token</label>
+      <input id="formToken" type="text" placeholder="spreadsheetToken" />
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>目标路径</label>
+      <input id="formPath" type="text" placeholder="例：ReplicatedStorage.Data" />
+    </div>
+    <div class="form-group">
+      <label>文件名</label>
+      <input id="formFileName" type="text" placeholder="例：MonsterConfig" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="hideModal()">取消</button>
+      <button class="btn btn-primary" onclick="submitForm()">确认</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const api = (path, data) => fetch(path, data ? {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify(data)
+} : {}).then(r => r.json());
+
+let editingName = null;
+let sheetStatuses = {};
+
+// 日志 -- Ian
+function log(msg, type = '') {
+  const box = document.getElementById('logBox');
+  const line = document.createElement('div');
+  line.className = 'log-line' + (type ? ' ' + type : '');
+  const time = new Date().toLocaleTimeString();
+  line.textContent = '[' + time + '] ' + msg;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('logBox').innerHTML = '';
+}
+
+// 加载配置 -- Ian
+async function loadConfig() {
+  const cfg = await api('/api/config');
+  document.getElementById('appId').value = cfg.appId || '';
+  document.getElementById('appSecret').value = cfg.appSecret || '';
+  document.getElementById('port').value = cfg.port || 11451;
+  renderSheets(cfg.sheets || []);
+}
+
+// 渲染配置表列表 -- Ian
+function renderSheets(sheets) {
+  const list = document.getElementById('sheetList');
+  if (!sheets || sheets.length === 0) {
+    list.innerHTML = '<div class="empty-state">暂无配置表，点击右上角添加</div>';
+    return;
+  }
+  list.innerHTML = sheets.map(s => {
+    const status = sheetStatuses[s.name] || '';
+    return `
+    <div class="sheet-item" id="item-${s.name}">
+      <div class="status-dot ${status}" id="dot-${s.name}"></div>
+      <div class="sheet-item-info">
+        <div class="sheet-item-name">${s.name}</div>
+        <div class="sheet-item-meta">${s.path}.${s.fileName}</div>
+      </div>
+      <div class="sheet-item-actions">
+        <button class="btn btn-secondary btn-sm" onclick="showEditModal('${s.name}')">编辑</button>
+        <button class="btn btn-primary btn-sm" onclick="importOne('${s.name}')">导入</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteSheet('${s.name}')">删除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// 设置单条状态 -- Ian
+function setStatus(name, status) {
+  sheetStatuses[name] = status;
+  const dot = document.getElementById('dot-' + name);
+  if (dot) {
+    dot.className = 'status-dot ' + status;
+  }
+}
+
+// 保存凭据 -- Ian
+async function saveCredentials() {
+  const appId = document.getElementById('appId').value.trim();
+  const appSecret = document.getElementById('appSecret').value.trim();
+  await api('/api/credentials', {appId, appSecret});
+  log('设置已保存', 'success');
+}
+
+// 单独保存端口 -- Ian
+async function savePort() {
+  const port = parseInt(document.getElementById('port').value) || 11451;
+  await api('/api/port', {port});
+  log('端口已保存，变更需要重启程序后生效', 'success');
+}
+
+// 测试连接 -- Ian
+async function testConnection() {
+  await saveCredentials();
+  log('正在测试连接...');
+  const res = await api('/api/test', {});
+  if (res.ok) {
+    log('✓ 连接成功，Token 获取正常', 'success');
+  } else {
+    log('✗ 连接失败: ' + res.error, 'error');
+  }
+}
+
+// 轮询等待 Studio 写入结果 -- Ian
+async function waitForResult(name) {
+  for (let i = 0; i < 30; i++) {
+    await new Promise(r => setTimeout(r, 1000));
+    const res = await api('/result');
+    if (res.done) {
+      if (res.fail === 0) {
+        setStatus(name, 'success');
+        log('✓「' + name + '」写入成功', 'success');
+      } else {
+        setStatus(name, 'error');
+        log('✗「' + name + '」写入失败 ' + res.fail + ' 个', 'error');
+      }
+      return;
+    }
+  }
+  setStatus(name, 'error');
+  log('✗「' + name + '」等待超时，请检查 Studio 插件是否正常运行', 'error');
+}
+
+// 导入单张 -- Ian
+async function importOne(name) {
+  setStatus(name, 'importing');
+  log('开始导入「' + name + '」...');
+  const res = await api('/api/import', {name});
+  if (!res.ok) {
+    setStatus(name, 'error');
+    log('✗「' + name + '」导入失败: ' + res.error, 'error');
+    return;
+  }
+  log('「' + name + '」数据已推送，等待 Studio 写入...');
+  await waitForResult(name);
+}
+
+// 全部导入 -- Ian
+async function importAll() {
+  log('开始全部导入...');
+  const sheets = await api('/api/sheets');
+  sheets.forEach(s => setStatus(s.name, 'importing'));
+  const res = await api('/api/import/all', {});
+  if (res.errors && res.errors.length > 0) {
+    res.errors.forEach(e => log('✗ ' + e, 'error'));
+  }
+  if (res.ok) {
+    log('全部数据已推送，等待 Studio 写入...');
+    await waitForResult(null);
+  }
+}
+
+// 删除 -- Ian
+async function deleteSheet(name) {
+  if (!confirm('确定要删除「' + name + '」吗？')) return;
+  await api('/api/sheets/delete', {name});
+  log('已删除「' + name + '」');
+  loadConfig();
+}
+
+// 保存方案 -- Ian
+async function exportScheme() {
+  const res = await api('/api/export', {});
+  if (res.ok) {
+    log('✓ 方案已保存到 ExcelConfig.json', 'success');
+  } else {
+    log('✗ 保存失败: ' + res.error, 'error');
+  }
+}
+
+// 加载方案 -- Ian
+async function loadScheme() {
+  if (!confirm('加载方案将覆盖当前所有配置，确定继续吗？')) return;
+  const res = await api('/api/load', {});
+  if (res.ok) {
+    log('✓ 方案加载成功', 'success');
+    loadConfig();
+  } else {
+    log('✗ 加载失败: ' + res.error, 'error');
+  }
+}
+
+// 弹窗 -- Ian
+function showAddModal() {
+  editingName = null;
+  document.getElementById('modalTitle').textContent = '添加配置表';
+  document.getElementById('formName').value = '';
+  document.getElementById('formToken').value = '';
+  document.getElementById('formPath').value = '';
+  document.getElementById('formFileName').value = '';
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+async function showEditModal(name) {
+  const sheets = await api('/api/sheets');
+  const sheet = sheets.find(s => s.name === name);
+  if (!sheet) return;
+  editingName = name;
+  document.getElementById('modalTitle').textContent = '编辑配置表';
+  document.getElementById('formName').value = sheet.name;
+  document.getElementById('formToken').value = sheet.token;
+  document.getElementById('formPath').value = sheet.path;
+  document.getElementById('formFileName').value = sheet.fileName;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+function hideModal() {
+  document.getElementById('modalOverlay').classList.remove('active');
+}
+
+async function submitForm() {
+  const sheet = {
+    name: document.getElementById('formName').value.trim(),
+    token: document.getElementById('formToken').value.trim(),
+    path: document.getElementById('formPath').value.trim(),
+    fileName: document.getElementById('formFileName').value.trim(),
+  };
+  if (!sheet.name || !sheet.token || !sheet.path || !sheet.fileName) {
+    alert('请填写所有字段');
+    return;
+  }
+  let res;
+  if (editingName) {
+    res = await api('/api/sheets/update', {originalName: editingName, sheet});
+  } else {
+    res = await api('/api/sheets/add', sheet);
+  }
+  if (res.ok) {
+    hideModal();
+    log(editingName ? '✓ 已更新「' + sheet.name + '」' : '✓ 已添加「' + sheet.name + '」', 'success');
+    loadConfig();
+  } else {
+    alert('操作失败: ' + res.error);
+  }
+}
+
+// 点击弹窗外部关闭 -- Ian
+document.getElementById('modalOverlay').addEventListener('click', function(e) {
+  if (e.target === this) hideModal();
+});
+
+// 切换使用说明显隐 -- Ian
+function toggleGuide() {
+  const guide = document.getElementById('guide');
+  guide.style.display = guide.style.display === 'none' ? 'block' : 'none';
+}
+
+// 初始化 -- Ian
+loadConfig();
+</script>
+</body>
+</html>

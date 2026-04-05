@@ -1,0 +1,354 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+	<External>null</External>
+	<External>nil</External>
+	<Item class="Script" referent="RBXBEA41E2CA5764A15948E348D">
+		<Properties>
+			<BinaryString name="AttributesSerialize" />
+			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+			<bool name="DefinesCapabilities">false</bool>
+			<bool name="Disabled">false</bool>
+			<Content name="LinkedSource">
+				<null />
+			</Content>
+			<string name="Name">极导表</string>
+			<token name="RunContext">0</token>
+			<string name="ScriptGuid">{DCA6C956-DEC2-4146-A689-4C1F5D799E55}</string>
+<ProtectedString name="Source"><![CDATA[--[[
+    极导表 — LarkExcel2Studio Studio 插件
+    负责轮询本地 RoEzConfig 工具，获取数据并写入工程
+    作者：Ian
+]]
+
+local FileWriter = require(script.FileWriter)
+
+-- ========================================
+-- 配置
+-- ========================================
+
+-- 轮询间隔（秒）-- Ian
+local POLL_INTERVAL = 1
+
+-- ========================================
+-- 初始化 Toolbar
+-- ========================================
+local toolbar   = plugin:CreateToolbar("极导表")
+local toggleBtn = toolbar:CreateButton("极导表", "极导表 - LarkExcel2Studio", "rbxassetid://83752827760423")
+toggleBtn.ClickableWhenViewportHidden = true
+
+-- ========================================
+-- 创建 DockWidget 日志面板
+-- ========================================
+local widgetInfo = DockWidgetPluginGuiInfo.new(
+    Enum.InitialDockState.Right,
+    false, false, 300, 400, 250, 300
+)
+local widget = plugin:CreateDockWidgetPluginGui("RoEzConfig_Widget", widgetInfo)
+widget.Title = "极导表"
+
+-- 切换面板显隐 -- Ian
+toggleBtn.Click:Connect(function()
+    widget.Enabled = not widget.Enabled
+end)
+
+-- ========================================
+-- 构建日志 UI
+-- ========================================
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(1, 0, 1, 0)
+frame.BackgroundColor3 = settings().Studio.Theme:GetColor(Enum.StudioStyleGuideColor.MainBackground)
+frame.BorderSizePixel = 0
+frame.Parent = widget
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, 0, 0, 32)
+titleLabel.BackgroundColor3 = settings().Studio.Theme:GetColor(Enum.StudioStyleGuideColor.Titlebar)
+titleLabel.BorderSizePixel = 0
+titleLabel.Text = "  🚀 极导表 · LarkExcel2Studio"
+titleLabel.TextColor3 = settings().Studio.Theme:GetColor(Enum.StudioStyleGuideColor.TitlebarText)
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Font = Enum.Font.SourceSansSemibold
+titleLabel.TextSize = 14
+titleLabel.Parent = frame
+
+-- 端口配置区 -- Ian
+local portFrame = Instance.new("Frame")
+portFrame.Size = UDim2.new(1, 0, 0, 44)
+portFrame.Position = UDim2.new(0, 0, 0, 32)
+portFrame.BackgroundColor3 = settings().Studio.Theme:GetColor(Enum.StudioStyleGuideColor.Titlebar)
+portFrame.BorderSizePixel = 0
+portFrame.Parent = frame
+
+local portLabel = Instance.new("TextLabel")
+portLabel.Size = UDim2.new(0, 80, 1, 0)
+portLabel.BackgroundTransparency = 1
+portLabel.Text = "  插件端口:"
+portLabel.TextColor3 = settings().Studio.Theme:GetColor(Enum.StudioStyleGuideColor.MainText)
+portLabel.TextSize = 18
+portLabel.Font = Enum.Font.SourceSans
+portLabel.TextXAlignment = Enum.TextXAlignment.Left
+portLabel.Parent = portFrame
+
+local portInput = Instance.new("TextBox")
+portInput.Size = UDim2.new(0, 100, 0, 30)
+portInput.Position = UDim2.new(0, 82, 0, 7)
+portInput.BackgroundColor3 = settings().Studio.Theme:GetColor(Enum.StudioStyleGuideColor.InputFieldBackground)
+portInput.BorderSizePixel = 0
+portInput.Text = "11451"
+portInput.TextColor3 = settings().Studio.Theme:GetColor(Enum.StudioStyleGuideColor.MainText)
+portInput.TextSize = 18
+portInput.Font = Enum.Font.SourceSans
+portInput.ClearTextOnFocus = false
+portInput.Parent = portFrame
+
+-- 保存端口按钮 -- Ian
+local portSaveBtn = Instance.new("TextButton")
+portSaveBtn.Size = UDim2.new(0, 80, 0, 30)
+portSaveBtn.Position = UDim2.new(0, 190, 0, 7)
+portSaveBtn.BackgroundColor3 = settings().Studio.Theme:GetColor(Enum.StudioStyleGuideColor.DialogMainButton)
+portSaveBtn.TextColor3 = settings().Studio.Theme:GetColor(Enum.StudioStyleGuideColor.DialogMainButtonText)
+portSaveBtn.Text = "保存端口"
+portSaveBtn.TextSize = 14
+portSaveBtn.Font = Enum.Font.SourceSansSemibold
+portSaveBtn.BorderSizePixel = 0
+portSaveBtn.Parent = portFrame
+
+local portSaveCorner = Instance.new("UICorner")
+portSaveCorner.CornerRadius = UDim.new(0, 4)
+portSaveCorner.Parent = portSaveBtn
+
+
+local logScroll = Instance.new("ScrollingFrame")
+logScroll.Size = UDim2.new(1, 0, 1, -68)
+logScroll.Position = UDim2.new(0, 0, 0, 68)
+logScroll.BackgroundColor3 = settings().Studio.Theme:GetColor(Enum.StudioStyleGuideColor.MainBackground)
+logScroll.BorderSizePixel = 0
+logScroll.ScrollBarThickness = 4
+logScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+logScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+logScroll.Parent = frame
+
+local logLayout = Instance.new("UIListLayout")
+logLayout.SortOrder = Enum.SortOrder.LayoutOrder
+logLayout.Padding = UDim.new(0, 2)
+logLayout.Parent = logScroll
+
+local logPadding = Instance.new("UIPadding")
+logPadding.PaddingLeft = UDim.new(0, 8)
+logPadding.PaddingRight = UDim.new(0, 8)
+logPadding.PaddingTop = UDim.new(0, 6)
+logPadding.Parent = logScroll
+
+-- ========================================
+-- 日志函数
+-- ========================================
+local logCounter = 0
+
+local function log(message, isError)
+    logCounter = logCounter + 1
+    local label = Instance.new("TextLabel")
+    label.Name = "Log_" .. logCounter
+    label.Size = UDim2.new(1, 0, 0, 0)
+    label.AutomaticSize = Enum.AutomaticSize.Y
+    label.BackgroundTransparency = 1
+    label.Text = message
+    label.TextSize = 13
+    label.Font = Enum.Font.SourceSans
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextWrapped = true
+    label.TextColor3 = isError
+        and Color3.fromRGB(200, 60, 60)
+        or settings().Studio.Theme:GetColor(Enum.StudioStyleGuideColor.MainText)
+    label.LayoutOrder = logCounter
+    label.Parent = logScroll
+
+    -- 自动滚动到底部 -- Ian
+    task.defer(function()
+        logScroll.CanvasPosition = Vector2.new(0, logScroll.AbsoluteCanvasSize.Y)
+    end)
+end
+
+
+-- 点击保存端口，提示重启 Studio -- Ian
+portSaveBtn.MouseButton1Click:Connect(function()
+    log("端口已保存为 " .. portInput.Text .. "，变更需要重启 Studio 后生效")
+end)
+
+-- ========================================
+-- 轮询逻辑
+-- ========================================
+local HttpService = game:GetService("HttpService")
+
+log("极导表已启动，正在监听本地工具...")
+log(string.format("轮询地址：%s", "http://localhost:" .. (tonumber(portInput.Text) or 11451) .. "/poll"))
+
+task.spawn(function()
+    while true do
+        task.wait(POLL_INTERVAL)
+
+        -- 请求轮询接口 -- Ian
+        local ok, response = pcall(function()
+            return HttpService:RequestAsync({
+                Url = "http://localhost:" .. (tonumber(portInput.Text) or 11451) .. "/poll",
+                Method = "GET",
+            })
+        end)
+
+        if not ok or not response.Success then
+            -- 连接失败时静默跳过，不刷屏 -- Ian
+            continue
+        end
+
+        -- 解析响应 -- Ian
+        local decodeOk, data = pcall(function()
+            return HttpService:JSONDecode(response.Body)
+        end)
+
+        if not decodeOk or not data.hasUpdate then
+            continue
+        end
+
+        -- 有新数据，逐个写入 -- Ian
+        log(string.format("收到 %d 个写入任务，开始写入...", #data.tasks))
+
+        local successCount = 0
+        local failCount = 0
+
+        for _, task_ in ipairs(data.tasks) do
+            local writeOk, writeErr = FileWriter:Write(task_.path, task_.fileName, task_.code)
+            if writeOk then
+                successCount = successCount + 1
+                log(string.format("✓ 已写入 %s.%s", task_.path, task_.fileName))
+            else
+                failCount = failCount + 1
+                log(string.format("✗ 写入失败 %s.%s : %s", task_.path, task_.fileName, tostring(writeErr)), true)
+            end
+        end
+
+        log(string.format("完成：成功 %d，失败 %d", successCount, failCount))
+
+        -- 通知本地工具已完成，携带写入结果 -- Ian
+        pcall(function()
+            HttpService:RequestAsync({
+                Url = "http://localhost:" .. (tonumber(portInput.Text) or 11451) .. "/ack",
+                Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = HttpService:JSONEncode({
+                    success = successCount,
+                    fail = failCount,
+                    errors = {},
+                }),
+            })
+        end)
+    end
+end)
+]]></ProtectedString>			<int64 name="SourceAssetId">-1</int64>
+			<BinaryString name="Tags" />
+		</Properties>
+
+		<Item class="ModuleScript" referent="RBXA34E1A2998C9452D815F5A4E">
+			<Properties>
+				<BinaryString name="AttributesSerialize" />
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource">
+					<null />
+				</Content>
+				<string name="Name">FileWriter</string>
+				<string name="ScriptGuid">{6E2ADA42-E1F8-4D1C-9F6B-0C379700800A}</string>
+				<ProtectedString name="Source"><![CDATA[--[[
+	FileWriter 模块 — ModuleScript 创建与更新
+	负责将生成的 Lua 代码写入到 Studio 工程的指定路径
+	作者：Ian
+]]
+
+local ScriptEditorService = game:GetService("ScriptEditorService")
+
+local FileWriter = {}
+
+--[[
+	解析点分隔的路径字符串，返回对应的 Roblox 实例
+	例如 "ReplicatedStorage.Data" → game.ReplicatedStorage.Data
+	如果中间的文件夹不存在则自动创建
+	@param pathStr - 点分隔的路径，如 "ReplicatedStorage.Data.Config"
+	@return Instance? 目标文件夹实例
+	@return string? 错误信息
+	-- Ian
+]]
+local function resolvePath(pathStr)
+	local parts = string.split(pathStr, ".")
+	if #parts == 0 then
+		return nil, "路径不能为空"
+	end
+
+	-- 第一个部分必须是 Service 名称 -- Ian
+	local ok, service = pcall(function()
+		return game:GetService(parts[1])
+	end)
+	if not ok or not service then
+		return nil, string.format("无法找到服务: %s", parts[1])
+	end
+
+	-- 逐级查找或创建文件夹 -- Ian
+	local current = service
+	for i = 2, #parts do
+		local child = current:FindFirstChild(parts[i])
+		if not child then
+			child = Instance.new("Folder")
+			child.Name = parts[i]
+			child.Parent = current
+		end
+		current = child
+	end
+
+	return current
+end
+
+--[[
+	将 Lua 源码写入到指定路径的 ModuleScript
+	如果 ModuleScript 不存在则创建，存在则更新内容
+	@param pathStr - 目标路径（点分隔），如 "ReplicatedStorage.Data"
+	@param fileName - ModuleScript 名称
+	@param content - Lua 源码内容
+	@return boolean 是否成功
+	@return string? 错误信息
+	-- Ian
+]]
+function FileWriter:Write(pathStr, fileName, content)
+	-- 解析路径 -- Ian
+	local folder, pathErr = resolvePath(pathStr)
+	if not folder then
+		return false, pathErr
+	end
+
+	-- 查找或创建 ModuleScript -- Ian
+	local file = folder:FindFirstChild(fileName)
+	if not file then
+		file = Instance.new("ModuleScript")
+		file.Name = fileName
+		file.Parent = folder
+	end
+
+	-- 使用 ScriptEditorService 更新源码 -- Ian
+	local ok, err = pcall(function()
+		ScriptEditorService:UpdateSourceAsync(file, function()
+			return content
+		end)
+	end)
+
+	if not ok then
+		return false, "写入脚本失败: " .. tostring(err)
+	end
+
+	return true
+end
+
+return FileWriter
+]]></ProtectedString>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags" />
+			</Properties>
+		</Item>
+
+	</Item>
+</roblox>
