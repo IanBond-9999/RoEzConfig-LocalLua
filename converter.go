@@ -5,6 +5,18 @@ import (
 	"strings"
 )
 
+// 将值格式化为数字字符串，避免科学计数法 -- Ian
+func formatNumber(v any) string {
+	if f, ok := v.(float64); ok {
+		if f == float64(int64(f)) {
+			return fmt.Sprintf("%d", int64(f))
+		}
+		s := strings.TrimRight(fmt.Sprintf("%f", f), "0")
+		return strings.TrimRight(s, ".")
+	}
+	return fmt.Sprintf("%v", v)
+}
+
 // 转义 Lua 字符串中的特殊字符 -- Ian
 func escapeLuaString(s string) string {
 	s = strings.ReplaceAll(s, "\\", "\\\\")
@@ -49,9 +61,9 @@ func convertSheet(sheetTitle string, values [][]any) (string, error) {
 			keyType = fmt.Sprintf("%v", valueTypes[0])
 		}
 		if keyType == "number" {
-			line.WriteString(fmt.Sprintf("\n\t[%v] = {", row[0]))
+			line.WriteString(fmt.Sprintf("\n\t[%s] = {", formatNumber(row[0])))
 		} else {
-			line.WriteString(fmt.Sprintf("\n\t[\"%s\"] = {", escapeLuaString(fmt.Sprintf("%v", row[0]))))
+			line.WriteString(fmt.Sprintf("\n\t[\"%s\"] = {", escapeLuaString(formatNumber(row[0]))))
 		}
 
 		// 遍历每一列 -- Ian
@@ -78,7 +90,19 @@ func convertSheet(sheetTitle string, values [][]any) (string, error) {
 			if fieldValue == nil || fmt.Sprintf("%v", fieldValue) == "nil" {
 				formatted = "nil"
 			} else if fieldType == "string" {
-				formatted = fmt.Sprintf(`"%s"`, escapeLuaString(fmt.Sprintf("%v", fieldValue)))
+				// 字符串类型：如果值被 JSON 解析为 float64，需避免科学计数法 -- Ian
+				str := ""
+				if f, ok := fieldValue.(float64); ok {
+					if f == float64(int64(f)) {
+						str = fmt.Sprintf("%d", int64(f))
+					} else {
+						str = strings.TrimRight(fmt.Sprintf("%f", f), "0")
+						str = strings.TrimRight(str, ".")
+					}
+				} else {
+					str = fmt.Sprintf("%v", fieldValue)
+				}
+				formatted = fmt.Sprintf(`"%s"`, escapeLuaString(str))
 			} else {
 				// 数字类型：避免科学计数法，尝试格式化为整数 -- Ian
 				if f, ok := fieldValue.(float64); ok {

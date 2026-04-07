@@ -24,9 +24,9 @@ func writeError(w http.ResponseWriter, msg string) {
 }
 
 // 执行单张表导入，将 Lua 文件写到本地指定路径 -- Ian
-func importSheet(sheet SheetConfig) error {
+func importSheet(project Project, sheet SheetConfig) error {
 	// 第一步：获取 sheet 列表 -- Ian
-	sheets, err := feiShuClient.GetSheetInfo(sheet.Token)
+	sheets, err := feiShuClient.GetSheetInfo(project.AppID, project.AppSecret, sheet.Token)
 	if err != nil {
 		return fmt.Errorf("获取 sheet 列表失败: %w", err)
 	}
@@ -40,7 +40,7 @@ func importSheet(sheet SheetConfig) error {
 	}
 
 	// 第三步：批量获取数据 -- Ian
-	valueRanges, err := feiShuClient.GetSheetRangeData(sheet.Token, sheetIDs)
+	valueRanges, err := feiShuClient.GetSheetRangeData(project.AppID, project.AppSecret, sheet.Token, sheetIDs)
 	if err != nil {
 		return fmt.Errorf("获取数据失败: %w", err)
 	}
@@ -93,6 +93,75 @@ func startUIServer() {
 		writeJSON(w, configManager.GetConfig())
 	})
 
+	// === 项目管理 API === -- Ian
+
+	// 添加项目 -- Ian
+	mux.HandleFunc("/api/projects/add", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			writeError(w, "Method not allowed")
+			return
+		}
+		var body struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, "请求格式错误")
+			return
+		}
+		if body.Name == "" {
+			writeError(w, "项目名称不能为空")
+			return
+		}
+		if err := configManager.AddProject(body.Name); err != nil {
+			writeError(w, err.Error())
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true})
+	})
+
+	// 重命名项目 -- Ian
+	mux.HandleFunc("/api/projects/rename", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			writeError(w, "Method not allowed")
+			return
+		}
+		var body struct {
+			OldName string `json:"oldName"`
+			NewName string `json:"newName"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, "请求格式错误")
+			return
+		}
+		if err := configManager.RenameProject(body.OldName, body.NewName); err != nil {
+			writeError(w, err.Error())
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true})
+	})
+
+	// 删除项目 -- Ian
+	mux.HandleFunc("/api/projects/delete", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			writeError(w, "Method not allowed")
+			return
+		}
+		var body struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, "请求格式错误")
+			return
+		}
+		if err := configManager.DeleteProject(body.Name); err != nil {
+			writeError(w, err.Error())
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true})
+	})
+
+	// === 项目内操作 API（均需 project 参数） === -- Ian
+
 	// 保存凭据 -- Ian
 	mux.HandleFunc("/api/credentials", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
@@ -100,6 +169,7 @@ func startUIServer() {
 			return
 		}
 		var body struct {
+			Project   string `json:"project"`
 			AppID     string `json:"appId"`
 			AppSecret string `json:"appSecret"`
 		}
@@ -107,7 +177,7 @@ func startUIServer() {
 			writeError(w, "请求格式错误")
 			return
 		}
-		if err := configManager.SaveCredentials(body.AppID, body.AppSecret); err != nil {
+		if err := configManager.SaveCredentials(body.Project, body.AppID, body.AppSecret); err != nil {
 			writeError(w, err.Error())
 			return
 		}
@@ -116,7 +186,23 @@ func startUIServer() {
 
 	// 测试连接 -- Ian
 	mux.HandleFunc("/api/test", func(w http.ResponseWriter, r *http.Request) {
-		if err := feiShuClient.TestConnection(); err != nil {
+		if r.Method != "POST" {
+			writeError(w, "Method not allowed")
+			return
+		}
+		var body struct {
+			Project string `json:"project"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, "请求格式错误")
+			return
+		}
+		proj := configManager.GetProject(body.Project)
+		if proj == nil {
+			writeError(w, fmt.Sprintf("找不到项目「%s」", body.Project))
+			return
+		}
+		if err := feiShuClient.TestConnection(proj.AppID, proj.AppSecret); err != nil {
 			writeError(w, err.Error())
 			return
 		}
@@ -125,7 +211,12 @@ func startUIServer() {
 
 	// 获取配置表列表 -- Ian
 	mux.HandleFunc("/api/sheets", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, configManager.GetSheets())
+		project := r.URL.Query().Get("project")
+		sheets := configManager.GetSheets(project)
+		if sheets == nil {
+			sheets = []SheetConfig{}
+		}
+		writeJSON(w, sheets)
 	})
 
 	// 添加配置表 -- Ian
@@ -134,12 +225,15 @@ func startUIServer() {
 			writeError(w, "Method not allowed")
 			return
 		}
-		var sheet SheetConfig
-		if err := json.NewDecoder(r.Body).Decode(&sheet); err != nil {
+		var body struct {
+			Project string      `json:"project"`
+			Sheet   SheetConfig `json:"sheet"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, "请求格式错误")
 			return
 		}
-		if err := configManager.AddSheet(sheet); err != nil {
+		if err := configManager.AddSheet(body.Project, body.Sheet); err != nil {
 			writeError(w, err.Error())
 			return
 		}
@@ -153,6 +247,7 @@ func startUIServer() {
 			return
 		}
 		var body struct {
+			Project      string      `json:"project"`
 			OriginalName string      `json:"originalName"`
 			Sheet        SheetConfig `json:"sheet"`
 		}
@@ -160,7 +255,7 @@ func startUIServer() {
 			writeError(w, "请求格式错误")
 			return
 		}
-		if err := configManager.UpdateSheet(body.OriginalName, body.Sheet); err != nil {
+		if err := configManager.UpdateSheet(body.Project, body.OriginalName, body.Sheet); err != nil {
 			writeError(w, err.Error())
 			return
 		}
@@ -174,13 +269,14 @@ func startUIServer() {
 			return
 		}
 		var body struct {
-			Name string `json:"name"`
+			Project string `json:"project"`
+			Name    string `json:"name"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, "请求格式错误")
 			return
 		}
-		if err := configManager.DeleteSheet(body.Name); err != nil {
+		if err := configManager.DeleteSheet(body.Project, body.Name); err != nil {
 			writeError(w, err.Error())
 			return
 		}
@@ -194,16 +290,23 @@ func startUIServer() {
 			return
 		}
 		var body struct {
-			Name string `json:"name"`
+			Project string `json:"project"`
+			Name    string `json:"name"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, "请求格式错误")
 			return
 		}
 
+		proj := configManager.GetProject(body.Project)
+		if proj == nil {
+			writeError(w, fmt.Sprintf("找不到项目「%s」", body.Project))
+			return
+		}
+
 		// 找到对应配置 -- Ian
 		var target *SheetConfig
-		for _, s := range configManager.GetSheets() {
+		for _, s := range proj.Sheets {
 			if s.Name == body.Name {
 				s := s
 				target = &s
@@ -215,7 +318,7 @@ func startUIServer() {
 			return
 		}
 
-		if err := importSheet(*target); err != nil {
+		if err := importSheet(*proj, *target); err != nil {
 			writeError(w, err.Error())
 			return
 		}
@@ -228,16 +331,28 @@ func startUIServer() {
 			writeError(w, "Method not allowed")
 			return
 		}
+		var body struct {
+			Project string `json:"project"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, "请求格式错误")
+			return
+		}
 
-		sheets := configManager.GetSheets()
-		if len(sheets) == 0 {
+		proj := configManager.GetProject(body.Project)
+		if proj == nil {
+			writeError(w, fmt.Sprintf("找不到项目「%s」", body.Project))
+			return
+		}
+
+		if len(proj.Sheets) == 0 {
 			writeError(w, "没有配置表可导入")
 			return
 		}
 
 		var errors []string
-		for _, sheet := range sheets {
-			if err := importSheet(sheet); err != nil {
+		for _, sheet := range proj.Sheets {
+			if err := importSheet(*proj, sheet); err != nil {
 				errors = append(errors, fmt.Sprintf("「%s」失败: %s", sheet.Name, err.Error()))
 			}
 		}
@@ -288,6 +403,22 @@ func startUIServer() {
 		configManager.mu.Unlock()
 		if err := configManager.save(); err != nil {
 			writeError(w, "保存失败: "+err.Error())
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true})
+	})
+
+	// 清除所有配置 -- Ian
+	mux.HandleFunc("/api/clear", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			writeError(w, "Method not allowed")
+			return
+		}
+		configManager.mu.Lock()
+		configManager.config = Config{Projects: []Project{}}
+		configManager.mu.Unlock()
+		if err := configManager.save(); err != nil {
+			writeError(w, "清除失败: "+err.Error())
 			return
 		}
 		writeJSON(w, map[string]any{"ok": true})

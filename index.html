@@ -8,7 +8,7 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
   .container { max-width: 860px; margin: 0 auto; padding: 32px 24px; }
-  .header { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
+  .header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
   .header h1 { font-size: 22px; font-weight: 700; color: #fff; }
   .header .version { font-size: 12px; color: #4a5568; background: #1a1d27; padding: 3px 8px; border-radius: 4px; }
   .card { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
@@ -54,6 +54,19 @@
   .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
   .modal .form-group input { background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 10px 14px; color: #e2e8f0; font-size: 14px; width: 100%; outline: none; transition: border-color 0.2s; }
   .section-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+
+  /* 页签栏样式 -- Ian */
+  .tab-bar { display: flex; align-items: center; gap: 4px; margin-bottom: 20px; padding: 4px; background: #1a1d27; border: 1px solid #2d3148; border-radius: 10px; overflow-x: auto; }
+  .tab-item { display: flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; color: #7c85b0; cursor: pointer; transition: all 0.2s; white-space: nowrap; user-select: none; }
+  .tab-item:hover { background: #2d3148; color: #a0aec0; }
+  .tab-item.active { background: #5b6af0; color: #fff; }
+  .tab-item .tab-close { font-size: 12px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 4px; opacity: 0.5; transition: all 0.2s; }
+  .tab-item .tab-close:hover { opacity: 1; background: rgba(255,255,255,0.15); }
+  .tab-item.active .tab-close:hover { background: rgba(255,255,255,0.25); }
+  .tab-add { padding: 8px 12px; border-radius: 8px; font-size: 16px; font-weight: 700; color: #5b6af0; cursor: pointer; transition: all 0.2s; }
+  .tab-add:hover { background: #2d3148; }
+  .tab-rename-input { background: transparent; border: none; color: inherit; font: inherit; padding: 0; width: 80px; outline: none; }
+  .no-project { text-align: center; padding: 60px 24px; color: #4a5568; font-size: 15px; }
 </style>
 </head>
 <body>
@@ -90,47 +103,69 @@
         </table>
         <p style="margin-bottom:8px;">💡 将备注列命名为 <code style="background:#2d3148; padding:2px 6px; border-radius:4px;">Note</code> 会自动跳过，不导入。</p>
         <p style="margin-bottom:16px;">💡 飞书 Token 在表格 URL 中获取，类似 <code style="background:#2d3148; padding:2px 6px; border-radius:4px;">JzeysH5p1ang2ktu5sGcTOGFnLe</code> 的一段字符串。</p>
+        <p style="margin-bottom:8px;"><strong style="color:#e2e8f0;">多项目管理</strong></p>
+        <p style="margin-bottom:16px;">点击页签栏的「+」按钮可创建多个项目，每个项目有独立的飞书凭据和配置表。双击页签名称可重命名。</p>
         <p style="margin-bottom:8px;"><strong style="color:#e2e8f0;">团队协作</strong></p>
-        <p style="margin-bottom:16px;">配置好所有表格后点击「保存方案」，将生成在同目录的 ExcelConfig.json 分享给团队成员，成员点击「加载方案」即可一键同步所有配置。</p>
+        <p style="margin-bottom:16px;">配置好所有项目和表格后点击「保存方案」，将生成在同目录的 ExcelConfig.json 分享给团队成员，成员点击「加载方案」即可一键同步所有配置（含所有项目）。</p>
         <p style="margin-bottom:8px;"><strong style="color:#e2e8f0;">本地目录说明</strong></p>
         <p>填写绝对路径（如 <code style="background:#2d3148; padding:2px 6px; border-radius:4px;">C:\Users\pc\Desktop\lua</code>），目录不存在时会自动创建。导入后会在该目录下生成或覆盖对应的 .lua 文件。</p>
       </div>
     </div>
   </div>
 
-  <!-- 飞书设置 -->
-  <div class="card">
-    <div class="card-title">飞书设置</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>App ID</label>
-        <input id="appId" type="text" placeholder="cli_xxxxxxxxxx" />
+  <!-- 方案管理（全局，不在项目内）-- Ian -->
+  <div class="card" style="padding:14px 24px; display:flex; align-items:center; justify-content:space-between;">
+    <span style="font-size:13px; color:#7c85b0; font-weight:600;">方案管理</span>
+    <div class="btn-row">
+      <button class="btn btn-secondary btn-sm" onclick="exportScheme()">保存方案</button>
+      <button class="btn btn-secondary btn-sm" onclick="loadScheme()">加载方案</button>
+      <button class="btn btn-danger btn-sm" onclick="clearAll()">清除方案</button>
+    </div>
+  </div>
+
+  <!-- 项目页签栏 -- Ian -->
+  <div class="tab-bar" id="tabBar">
+    <div class="tab-add" onclick="addProject()" title="新建项目">+</div>
+  </div>
+
+  <!-- 项目内容区域（无项目时显示提示） -- Ian -->
+  <div id="projectContent" style="display:none;">
+    <!-- 飞书设置 -->
+    <div class="card">
+      <div class="card-title">飞书设置</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>App ID</label>
+          <input id="appId" type="text" placeholder="cli_xxxxxxxxxx" />
+        </div>
+        <div class="form-group">
+          <label>App Secret</label>
+          <input id="appSecret" type="password" placeholder="••••••••••••••••" />
+        </div>
+        <div class="form-group" style="justify-content:flex-end;">
+          <label>&nbsp;</label>
+          <button class="btn btn-secondary" onclick="testConnection()">测试连接</button>
+        </div>
       </div>
-      <div class="form-group">
-        <label>App Secret</label>
-        <input id="appSecret" type="password" placeholder="••••••••••••••••" />
+    </div>
+
+    <!-- 配置表列表 -->
+    <div class="card">
+      <div class="section-actions">
+        <span class="card-title" style="margin-bottom:0">配置表列表</span>
+        <div class="btn-row">
+          <button class="btn btn-success btn-sm" onclick="importAll()">全部导入</button>
+          <button class="btn btn-primary btn-sm" onclick="showAddModal()">+ 添加</button>
+        </div>
       </div>
-      <div class="form-group" style="justify-content:flex-end;">
-        <label>&nbsp;</label>
-        <button class="btn btn-secondary" onclick="testConnection()">测试连接</button>
+      <div class="sheet-list" id="sheetList">
+        <div class="empty-state">暂无配置表，点击右上角添加</div>
       </div>
     </div>
   </div>
 
-  <!-- 配置表列表 -->
-  <div class="card">
-    <div class="section-actions">
-      <span class="card-title" style="margin-bottom:0">配置表列表</span>
-      <div class="btn-row">
-        <button class="btn btn-secondary btn-sm" onclick="exportScheme()">保存方案</button>
-        <button class="btn btn-secondary btn-sm" onclick="loadScheme()">加载方案</button>
-        <button class="btn btn-success btn-sm" onclick="importAll()">全部导入</button>
-        <button class="btn btn-primary btn-sm" onclick="showAddModal()">+ 添加</button>
-      </div>
-    </div>
-    <div class="sheet-list" id="sheetList">
-      <div class="empty-state">暂无配置表，点击右上角添加</div>
-    </div>
+  <div id="noProject" class="no-project">
+    点击上方「+」创建你的第一个项目
   </div>
 
   <!-- 日志 -->
@@ -177,6 +212,8 @@ const api = (path, data) => fetch(path, data ? {
   body: JSON.stringify(data)
 } : {}).then(r => r.json());
 
+let currentProject = null; // 当前激活的项目名 -- Ian
+let allProjects = [];      // 所有项目数据 -- Ian
 let editingName = null;
 let sheetStatuses = {};
 
@@ -195,12 +232,81 @@ function clearLog() {
   document.getElementById('logBox').innerHTML = '';
 }
 
-// 加载配置 -- Ian
+// 加载全部配置 -- Ian
 async function loadConfig() {
   const cfg = await api('/api/config');
-  document.getElementById('appId').value = cfg.appId || '';
-  document.getElementById('appSecret').value = cfg.appSecret || '';
-  renderSheets(cfg.sheets || []);
+  allProjects = cfg.projects || [];
+  renderTabs();
+  if (currentProject) {
+    const proj = allProjects.find(p => p.name === currentProject);
+    if (proj) {
+      showProject(proj);
+      return;
+    }
+  }
+  if (allProjects.length > 0) {
+    switchTab(allProjects[0].name);
+  } else {
+    currentProject = null;
+    document.getElementById('projectContent').style.display = 'none';
+    document.getElementById('noProject').style.display = 'block';
+  }
+}
+
+// 渲染页签栏 -- Ian
+let tabClickTimer = null;
+function renderTabs() {
+  const bar = document.getElementById('tabBar');
+  const addBtn = '<div class="tab-add" onclick="addProject()" title="新建项目">+</div>';
+  if (allProjects.length === 0) {
+    bar.innerHTML = addBtn;
+    return;
+  }
+  bar.innerHTML = allProjects.map(p => {
+    const active = p.name === currentProject ? ' active' : '';
+    return `<div class="tab-item${active}" data-name="${esc(p.name)}">
+      <span class="tab-label">${esc(p.name)}</span>
+      <span class="tab-close" title="删除项目">&times;</span>
+    </div>`;
+  }).join('') + addBtn;
+
+  // 用事件委托处理单击/双击/删除 -- Ian
+  bar.querySelectorAll('.tab-item').forEach(el => {
+    const name = el.dataset.name;
+    el.querySelector('.tab-close').addEventListener('click', function(e) {
+      e.stopPropagation();
+      deleteProject(name);
+    });
+    el.addEventListener('click', function() {
+      if (tabClickTimer) { clearTimeout(tabClickTimer); tabClickTimer = null; return; }
+      tabClickTimer = setTimeout(() => { tabClickTimer = null; switchTab(name); }, 250);
+    });
+    el.addEventListener('dblclick', function() {
+      if (tabClickTimer) { clearTimeout(tabClickTimer); tabClickTimer = null; }
+      startRenameTab(el, name);
+    });
+  });
+}
+
+// HTML 转义 -- Ian
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/'/g,'&#39;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// 切换到某个项目页签 -- Ian
+function switchTab(name) {
+  currentProject = name;
+  const proj = allProjects.find(p => p.name === name);
+  if (!proj) return;
+  renderTabs();
+  showProject(proj);
+}
+
+// 显示项目内容 -- Ian
+function showProject(proj) {
+  document.getElementById('projectContent').style.display = 'block';
+  document.getElementById('noProject').style.display = 'none';
+  document.getElementById('appId').value = proj.appId || '';
+  document.getElementById('appSecret').value = proj.appSecret || '';
+  renderSheets(proj.sheets || []);
 }
 
 // 渲染配置表列表 -- Ian
@@ -237,19 +343,83 @@ function setStatus(name, status) {
   }
 }
 
-// 保存凭据 -- Ian
+// === 项目管理 === -- Ian
+
+async function addProject() {
+  const name = prompt('请输入项目名称：');
+  if (!name || !name.trim()) return;
+  const res = await api('/api/projects/add', { name: name.trim() });
+  if (res.ok) {
+    log('✓ 已创建项目「' + name.trim() + '」', 'success');
+    currentProject = name.trim();
+    await loadConfig();
+  } else {
+    alert('创建失败: ' + res.error);
+  }
+}
+
+function startRenameTab(el, oldName) {
+  const label = el.querySelector('.tab-label');
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'tab-rename-input';
+  input.value = oldName;
+  input.style.width = Math.max(60, oldName.length * 14) + 'px';
+  label.replaceWith(input);
+  input.focus();
+  input.select();
+
+  async function finishRename() {
+    const newName = input.value.trim();
+    if (!newName || newName === oldName) {
+      renderTabs();
+      return;
+    }
+    const res = await api('/api/projects/rename', { oldName, newName });
+    if (res.ok) {
+      if (currentProject === oldName) currentProject = newName;
+      log('✓ 项目已重命名为「' + newName + '」', 'success');
+      await loadConfig();
+    } else {
+      alert('重命名失败: ' + res.error);
+      renderTabs();
+    }
+  }
+
+  input.addEventListener('blur', finishRename);
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { input.blur(); }
+    if (e.key === 'Escape') { renderTabs(); }
+  });
+}
+
+async function deleteProject(name) {
+  if (!confirm('确定要删除项目「' + name + '」及其所有配置吗？')) return;
+  const res = await api('/api/projects/delete', { name });
+  if (res.ok) {
+    log('已删除项目「' + name + '」');
+    if (currentProject === name) currentProject = null;
+    await loadConfig();
+  } else {
+    alert('删除失败: ' + res.error);
+  }
+}
+
+// === 凭据 === -- Ian
+
 async function saveCredentials() {
+  if (!currentProject) return;
   const appId = document.getElementById('appId').value.trim();
   const appSecret = document.getElementById('appSecret').value.trim();
-  await api('/api/credentials', {appId, appSecret});
+  await api('/api/credentials', { project: currentProject, appId, appSecret });
   log('设置已保存', 'success');
 }
 
-// 测试连接 -- Ian
 async function testConnection() {
+  if (!currentProject) return;
   await saveCredentials();
   log('正在测试连接...');
-  const res = await api('/api/test', {});
+  const res = await api('/api/test', { project: currentProject });
   if (res.ok) {
     log('✓ 连接成功，Token 获取正常', 'success');
   } else {
@@ -257,11 +427,13 @@ async function testConnection() {
   }
 }
 
-// 导入单张 -- Ian
+// === 导入 === -- Ian
+
 async function importOne(name) {
+  if (!currentProject) return;
   setStatus(name, 'importing');
   log('开始导入「' + name + '」...');
-  const res = await api('/api/import', {name});
+  const res = await api('/api/import', { project: currentProject, name });
   if (res.ok) {
     setStatus(name, 'success');
     log('✓「' + name + '」导入成功，文件已写入', 'success');
@@ -271,12 +443,12 @@ async function importOne(name) {
   }
 }
 
-// 全部导入 -- Ian
 async function importAll() {
+  if (!currentProject) return;
   log('开始全部导入...');
-  const sheets = await api('/api/sheets');
+  const sheets = await api('/api/sheets?project=' + encodeURIComponent(currentProject));
   sheets.forEach(s => setStatus(s.name, 'importing'));
-  const res = await api('/api/import/all', {});
+  const res = await api('/api/import/all', { project: currentProject });
   if (res.errors && res.errors.length > 0) {
     res.errors.forEach(e => {
       log('✗ ' + e, 'error');
@@ -284,7 +456,6 @@ async function importAll() {
       if (match) setStatus(match[1], 'error');
     });
   }
-  // 将未出现在 errors 中的表标记为成功 -- Ian
   const failedNames = (res.errors || []).map(e => { const m = e.match(/^「(.+?)」/); return m ? m[1] : ''; });
   sheets.forEach(s => {
     if (!failedNames.includes(s.name)) setStatus(s.name, 'success');
@@ -292,38 +463,52 @@ async function importAll() {
   log('全部导入完成', 'success');
 }
 
-// 删除 -- Ian
+// === 配置表 CRUD === -- Ian
+
 async function deleteSheet(name) {
+  if (!currentProject) return;
   if (!confirm('确定要删除「' + name + '」吗？')) return;
-  await api('/api/sheets/delete', {name});
+  await api('/api/sheets/delete', { project: currentProject, name });
   log('已删除「' + name + '」');
   loadConfig();
 }
 
-// 保存方案 -- Ian
 async function exportScheme() {
   const res = await api('/api/export', {});
   if (res.ok) {
-    log('✓ 方案已保存到 ExcelConfig.json', 'success');
+    log('✓ 方案已保存到 ExcelConfig.json（含所有项目）', 'success');
   } else {
     log('✗ 保存失败: ' + res.error, 'error');
   }
 }
 
-// 加载方案 -- Ian
 async function loadScheme() {
-  if (!confirm('加载方案将覆盖当前所有配置，确定继续吗？')) return;
+  if (!confirm('加载方案将覆盖当前所有项目配置，确定继续吗？')) return;
   const res = await api('/api/load', {});
   if (res.ok) {
     log('✓ 方案加载成功', 'success');
+    currentProject = null;
     loadConfig();
   } else {
     log('✗ 加载失败: ' + res.error, 'error');
   }
 }
 
+async function clearAll() {
+  if (!confirm('确定要清除所有项目和配置吗？此操作不可撤销！')) return;
+  const res = await api('/api/clear', {});
+  if (res.ok) {
+    log('✓ 所有配置已清除', 'success');
+    currentProject = null;
+    loadConfig();
+  } else {
+    log('✗ 清除失败: ' + res.error, 'error');
+  }
+}
+
 // 弹窗 -- Ian
 function showAddModal() {
+  if (!currentProject) return;
   editingName = null;
   document.getElementById('modalTitle').textContent = '添加配置表';
   document.getElementById('formName').value = '';
@@ -334,7 +519,8 @@ function showAddModal() {
 }
 
 async function showEditModal(name) {
-  const sheets = await api('/api/sheets');
+  if (!currentProject) return;
+  const sheets = await api('/api/sheets?project=' + encodeURIComponent(currentProject));
   const sheet = sheets.find(s => s.name === name);
   if (!sheet) return;
   editingName = name;
@@ -351,6 +537,7 @@ function hideModal() {
 }
 
 async function submitForm() {
+  if (!currentProject) return;
   const sheet = {
     name: document.getElementById('formName').value.trim(),
     token: document.getElementById('formToken').value.trim(),
@@ -363,9 +550,9 @@ async function submitForm() {
   }
   let res;
   if (editingName) {
-    res = await api('/api/sheets/update', {originalName: editingName, sheet});
+    res = await api('/api/sheets/update', { project: currentProject, originalName: editingName, sheet });
   } else {
-    res = await api('/api/sheets/add', sheet);
+    res = await api('/api/sheets/add', { project: currentProject, sheet });
   }
   if (res.ok) {
     hideModal();

@@ -16,11 +16,17 @@ type SheetConfig struct {
 	FileName string `json:"fileName"` // 生成的 .lua 文件名（不含扩展名）
 }
 
-// 全局配置结构 -- Ian
-type Config struct {
+// 项目配置，每个页签对应一个项目 -- Ian
+type Project struct {
+	Name      string        `json:"name"`      // 项目名称
 	AppID     string        `json:"appId"`     // 飞书 App ID
 	AppSecret string        `json:"appSecret"` // 飞书 App Secret
 	Sheets    []SheetConfig `json:"sheets"`    // 配置表列表
+}
+
+// 全局配置结构 -- Ian
+type Config struct {
+	Projects []Project `json:"projects"` // 项目列表
 }
 
 // 配置管理器 -- Ian
@@ -46,7 +52,7 @@ func initConfig() error {
 	configManager = &ConfigManager{
 		filePath: filePath,
 		config: Config{
-			Sheets: []SheetConfig{},
+			Projects: []Project{},
 		},
 	}
 
@@ -82,44 +88,130 @@ func (cm *ConfigManager) GetConfig() Config {
 	return cm.config
 }
 
-// 更新飞书凭据 -- Ian
-func (cm *ConfigManager) SaveCredentials(appId, appSecret string) error {
+// 查找项目索引，返回 -1 表示未找到（调用方需持锁） -- Ian
+func (cm *ConfigManager) findProject(name string) int {
+	for i, p := range cm.config.Projects {
+		if p.Name == name {
+			return i
+		}
+	}
+	return -1
+}
+
+// 获取项目 -- Ian
+func (cm *ConfigManager) GetProject(name string) *Project {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	idx := cm.findProject(name)
+	if idx < 0 {
+		return nil
+	}
+	p := cm.config.Projects[idx]
+	return &p
+}
+
+// 添加项目 -- Ian
+func (cm *ConfigManager) AddProject(name string) error {
 	cm.mu.Lock()
-	cm.config.AppID = appId
-	cm.config.AppSecret = appSecret
+	if cm.findProject(name) >= 0 {
+		cm.mu.Unlock()
+		return fmt.Errorf("已存在同名项目「%s」", name)
+	}
+	cm.config.Projects = append(cm.config.Projects, Project{
+		Name:   name,
+		Sheets: []SheetConfig{},
+	})
 	cm.mu.Unlock()
 	return cm.save()
 }
 
-// 获取所有配置表 -- Ian
-func (cm *ConfigManager) GetSheets() []SheetConfig {
+// 重命名项目 -- Ian
+func (cm *ConfigManager) RenameProject(oldName, newName string) error {
+	cm.mu.Lock()
+	if cm.findProject(newName) >= 0 {
+		cm.mu.Unlock()
+		return fmt.Errorf("已存在同名项目「%s」", newName)
+	}
+	idx := cm.findProject(oldName)
+	if idx < 0 {
+		cm.mu.Unlock()
+		return fmt.Errorf("找不到项目「%s」", oldName)
+	}
+	cm.config.Projects[idx].Name = newName
+	cm.mu.Unlock()
+	return cm.save()
+}
+
+// 删除项目 -- Ian
+func (cm *ConfigManager) DeleteProject(name string) error {
+	cm.mu.Lock()
+	idx := cm.findProject(name)
+	if idx < 0 {
+		cm.mu.Unlock()
+		return fmt.Errorf("找不到项目「%s」", name)
+	}
+	cm.config.Projects = append(cm.config.Projects[:idx], cm.config.Projects[idx+1:]...)
+	cm.mu.Unlock()
+	return cm.save()
+}
+
+// 更新飞书凭据 -- Ian
+func (cm *ConfigManager) SaveCredentials(projectName, appId, appSecret string) error {
+	cm.mu.Lock()
+	idx := cm.findProject(projectName)
+	if idx < 0 {
+		cm.mu.Unlock()
+		return fmt.Errorf("找不到项目「%s」", projectName)
+	}
+	cm.config.Projects[idx].AppID = appId
+	cm.config.Projects[idx].AppSecret = appSecret
+	cm.mu.Unlock()
+	return cm.save()
+}
+
+// 获取项目的所有配置表 -- Ian
+func (cm *ConfigManager) GetSheets(projectName string) []SheetConfig {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
-	result := make([]SheetConfig, len(cm.config.Sheets))
-	copy(result, cm.config.Sheets)
+	idx := cm.findProject(projectName)
+	if idx < 0 {
+		return nil
+	}
+	result := make([]SheetConfig, len(cm.config.Projects[idx].Sheets))
+	copy(result, cm.config.Projects[idx].Sheets)
 	return result
 }
 
 // 添加配置表，名称不能重复 -- Ian
-func (cm *ConfigManager) AddSheet(sheet SheetConfig) error {
+func (cm *ConfigManager) AddSheet(projectName string, sheet SheetConfig) error {
 	cm.mu.Lock()
-	for _, s := range cm.config.Sheets {
+	idx := cm.findProject(projectName)
+	if idx < 0 {
+		cm.mu.Unlock()
+		return fmt.Errorf("找不到项目「%s」", projectName)
+	}
+	for _, s := range cm.config.Projects[idx].Sheets {
 		if s.Name == sheet.Name {
 			cm.mu.Unlock()
 			return fmt.Errorf("已存在同名配置「%s」", sheet.Name)
 		}
 	}
-	cm.config.Sheets = append(cm.config.Sheets, sheet)
+	cm.config.Projects[idx].Sheets = append(cm.config.Projects[idx].Sheets, sheet)
 	cm.mu.Unlock()
 	return cm.save()
 }
 
 // 更新配置表 -- Ian
-func (cm *ConfigManager) UpdateSheet(originalName string, newSheet SheetConfig) error {
+func (cm *ConfigManager) UpdateSheet(projectName, originalName string, newSheet SheetConfig) error {
 	cm.mu.Lock()
-	for i, s := range cm.config.Sheets {
+	idx := cm.findProject(projectName)
+	if idx < 0 {
+		cm.mu.Unlock()
+		return fmt.Errorf("找不到项目「%s」", projectName)
+	}
+	for i, s := range cm.config.Projects[idx].Sheets {
 		if s.Name == originalName {
-			cm.config.Sheets[i] = newSheet
+			cm.config.Projects[idx].Sheets[i] = newSheet
 			cm.mu.Unlock()
 			return cm.save()
 		}
@@ -129,11 +221,17 @@ func (cm *ConfigManager) UpdateSheet(originalName string, newSheet SheetConfig) 
 }
 
 // 删除配置表 -- Ian
-func (cm *ConfigManager) DeleteSheet(name string) error {
+func (cm *ConfigManager) DeleteSheet(projectName, name string) error {
 	cm.mu.Lock()
-	for i, s := range cm.config.Sheets {
+	idx := cm.findProject(projectName)
+	if idx < 0 {
+		cm.mu.Unlock()
+		return fmt.Errorf("找不到项目「%s」", projectName)
+	}
+	sheets := cm.config.Projects[idx].Sheets
+	for i, s := range sheets {
 		if s.Name == name {
-			cm.config.Sheets = append(cm.config.Sheets[:i], cm.config.Sheets[i+1:]...)
+			cm.config.Projects[idx].Sheets = append(sheets[:i], sheets[i+1:]...)
 			cm.mu.Unlock()
 			return cm.save()
 		}
